@@ -1,455 +1,224 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Scanner Asistencia</title>
-<style>
-  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;700;800&display=swap');
+  <meta charset="UTF-8">
+  <title>Auto Asistencia</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  :root {
-    --bg: #0a0a0f;
-    --surface: #13131a;
-    --border: #1e1e2e;
-    --accent: #00e5a0;
-    --accent2: #005c41;
-    --danger: #ff4466;
-    --text: #e8e8f0;
-    --muted: #555570;
-  }
+  <style>
+    body {
+      font-family: Arial;
+      text-align: center;
+      padding: 20px;
+      background: #f5f5f5;
+    }
 
-  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    input {
+      font-size: 22px;
+      padding: 10px;
+      width: 90%;
+      max-width: 400px;
+      text-align: center;
+    }
 
-  body {
-    background: var(--bg);
-    color: var(--text);
-    font-family: 'Syne', sans-serif;
-    min-height: 100dvh;
-    display: flex;
-    flex-direction: column;
-    overflow-x: hidden;
-  }
+    button {
+      padding: 10px 20px;
+      margin: 10px;
+      font-size: 16px;
+      cursor: pointer;
+    }
 
-  header {
-    padding: 14px 20px;
-    border-bottom: 1px solid var(--border);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    background: var(--surface);
-    position: sticky; top: 0; z-index: 10;
-  }
-  .logo {
-    font-size: 1.1rem; font-weight: 800; letter-spacing: -0.03em;
-    display: flex; align-items: center; gap: 8px;
-  }
-  .logo-dot {
-    width: 10px; height: 10px; border-radius: 50%;
-    background: var(--accent); box-shadow: 0 0 12px var(--accent);
-    animation: pulse 2s infinite;
-  }
-  @keyframes pulse {
-    0%,100% { opacity:1; transform:scale(1); }
-    50% { opacity:0.4; transform:scale(0.7); }
-  }
-  .badge {
-    background: var(--accent2); color: var(--accent);
-    font-family: 'Space Mono', monospace; font-size: 0.8rem;
-    padding: 4px 10px; border-radius: 20px; border: 1px solid var(--accent);
-  }
+    table {
+      margin-top: 20px;
+      border-collapse: collapse;
+      width: 100%;
+      background: white;
+    }
 
-  .cam-wrap {
-    position: relative; background: #000;
-    display: flex; align-items: center; justify-content: center;
-    min-height: 180px;
-  }
-  #video {
-    width: 100%; display: block;
-    max-height: 200px; object-fit: cover;
-  }
+    th, td {
+      border: 1px solid #ddd;
+      padding: 10px;
+    }
 
-  .scan-overlay {
-    position: absolute; inset: 0;
-    display: flex; align-items: center; justify-content: center;
-    pointer-events: none;
-  }
-  .scan-frame { width: 220px; height: 90px; position: relative; }
-  .scan-frame::before, .scan-frame::after,
-  .scan-frame span::before, .scan-frame span::after {
-    content: ''; position: absolute;
-    width: 22px; height: 22px;
-    border-color: var(--accent); border-style: solid;
-  }
-  .scan-frame::before  { top:0; left:0;   border-width: 2px 0 0 2px; }
-  .scan-frame::after   { top:0; right:0;  border-width: 2px 2px 0 0; }
-  .scan-frame span::before { bottom:0; left:0;  border-width: 0 0 2px 2px; }
-  .scan-frame span::after  { bottom:0; right:0; border-width: 0 2px 2px 0; }
-  .scan-line {
-    position: absolute; left:4px; right:4px; height: 2px;
-    background: linear-gradient(90deg, transparent, var(--accent), transparent);
-    animation: scanline 2s ease-in-out infinite;
-    box-shadow: 0 0 8px var(--accent);
-  }
-  @keyframes scanline {
-    0%   { top: 4px; opacity:1; }
-    100% { top: calc(100% - 6px); opacity:0.2; }
-  }
+    th {
+      background: #333;
+      color: white;
+    }
 
-  .flash-overlay {
-    position: absolute; inset: 0;
-    background: var(--accent); opacity: 0; pointer-events: none;
-    transition: opacity 0.05s;
-  }
-  .flash-overlay.active { opacity: 0.4; }
+    #video {
+      width: 100%;
+      max-width: 400px;
+      display: none;
+      margin-top: 10px;
+    }
 
-  #placeholder {
-    background: #111; width: 100%; min-height: 180px;
-    display: flex; align-items: center; justify-content: center;
-  }
-  .start-btn {
-    background: transparent; border: none; cursor: pointer;
-    display: flex; flex-direction: column;
-    align-items: center; justify-content: center; gap: 10px;
-    padding: 20px;
-  }
-  .start-icon {
-    width: 68px; height: 68px; border-radius: 50%;
-    background: var(--accent); color: #000;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 1.8rem;
-    box-shadow: 0 0 30px #00e5a060;
-  }
-  .start-text { color: var(--muted); font-size: 0.85rem; }
-
-  .error-box {
-    background: #ff446618; border: 1px solid var(--danger);
-    border-radius: 8px; padding: 14px 16px; margin: 12px 16px;
-    font-size: 0.82rem; color: #ff8899; line-height: 1.6;
-    display: none;
-  }
-
-  .status-bar {
-    background: var(--surface);
-    border-bottom: 1px solid var(--border);
-    padding: 8px 20px;
-    display: flex; align-items: center; gap: 10px; min-height: 42px;
-  }
-  .status-label { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); white-space: nowrap; }
-  .status-id {
-    font-family: 'Space Mono', monospace; font-size: 0.95rem;
-    color: var(--accent); font-weight: 700; flex: 1;
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  }
-  .dup-tag {
-    font-size: 0.6rem; background: #ff446622; color: var(--danger);
-    border: 1px solid var(--danger); padding: 2px 6px;
-    border-radius: 4px; font-family: 'Space Mono', monospace;
-  }
-
-  .options-bar {
-    padding: 7px 20px; display: flex; align-items: center; gap: 8px;
-    border-bottom: 1px solid var(--border);
-  }
-  .opt-label { font-size: 0.72rem; color: var(--muted); flex: 1; }
-  .toggle { position: relative; width: 36px; height: 20px; }
-  .toggle input { opacity:0; width:0; height:0; }
-  .toggle-slider {
-    position: absolute; inset: 0;
-    background: var(--border); border-radius: 20px; cursor: pointer; transition: background 0.2s;
-  }
-  .toggle-slider::after {
-    content: ''; position: absolute;
-    width: 14px; height: 14px; background: var(--muted);
-    border-radius: 50%; top: 3px; left: 3px; transition: all 0.2s;
-  }
-  .toggle input:checked + .toggle-slider { background: var(--accent2); }
-  .toggle input:checked + .toggle-slider::after { transform: translateX(16px); background: var(--accent); }
-
-  .controls { display: flex; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--border); }
-  .btn {
-    flex: 1; padding: 12px 8px; border: none; border-radius: 8px;
-    font-family: 'Syne', sans-serif; font-weight: 700; font-size: 0.85rem;
-    cursor: pointer; transition: all 0.15s;
-    display: flex; align-items: center; justify-content: center; gap: 6px;
-  }
-  .btn-copy { background: var(--accent); color: #000; box-shadow: 0 4px 20px #00e5a040; }
-  .btn-copy:active { transform: scale(0.97); }
-  .btn-copy.ok { background: #fff; }
-  .btn-clear { background: transparent; color: var(--danger); border: 1px solid #ff446644; flex: 0 0 auto; padding: 12px 16px; }
-  .btn-clear:active { background: #ff446611; }
-
-  .list-header {
-    padding: 8px 20px 6px; display: flex;
-    align-items: center; justify-content: space-between;
-  }
-  .list-title { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); }
-  .list-hint { font-size: 0.6rem; color: var(--muted); font-family: 'Space Mono', monospace; }
-
-  #id-list {
-    flex: 1; overflow-y: auto;
-    padding: 0 16px 80px;
-    display: flex; flex-direction: column; gap: 4px;
-  }
-  .id-item {
-    display: flex; align-items: center; gap: 10px;
-    padding: 9px 12px;
-    background: var(--surface); border-radius: 6px;
-    border: 1px solid var(--border);
-    animation: slideIn 0.2s ease;
-  }
-  .id-item.fresh { border-color: var(--accent); background: #00e5a010; }
-  @keyframes slideIn {
-    from { opacity:0; transform: translateX(-8px); }
-    to   { opacity:1; transform: translateX(0); }
-  }
-  .item-num { font-size: 0.65rem; color: var(--muted); font-family: 'Space Mono', monospace; min-width: 18px; text-align: right; }
-  .item-id  { font-family: 'Space Mono', monospace; font-size: 0.9rem; flex: 1; }
-  .item-del { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 1rem; padding: 0 4px; }
-  .item-del:active { color: var(--danger); }
-
-  .empty { text-align: center; padding: 40px 20px; color: var(--muted); }
-  .empty-icon { font-size: 2.5rem; margin-bottom: 10px; }
-  .empty-msg  { font-size: 0.85rem; line-height: 1.6; }
-
-  .toast {
-    position: fixed; bottom: 24px; left: 50%;
-    transform: translateX(-50%) translateY(80px);
-    background: var(--accent); color: #000;
-    padding: 10px 24px; border-radius: 24px;
-    font-weight: 700; font-size: 0.9rem;
-    transition: transform 0.3s cubic-bezier(0.34,1.56,0.64,1);
-    z-index: 100; white-space: nowrap;
-    box-shadow: 0 8px 30px #00e5a060;
-  }
-  .toast.show { transform: translateX(-50%) translateY(0); }
-</style>
+    #status {
+      margin-top: 10px;
+      font-weight: bold;
+      color: green;
+    }
+  </style>
 </head>
+
 <body>
 
-<header>
-  <div class="logo"><div class="logo-dot"></div>Asistencia</div>
-  <div class="badge" id="badge">0 IDs</div>
-</header>
+<h2>📋 Sistema de Auto Asistencia</h2>
 
-<div class="cam-wrap" id="cam-wrap">
-  <div id="placeholder">
-    <button class="start-btn" id="start-btn" onclick="startCamera()">
-      <div class="start-icon">📷</div>
-      <span class="start-text">Toca para activar la cámara</span>
-    </button>
-  </div>
-  <video id="video" playsinline autoplay muted style="display:none"></video>
-  <div class="scan-overlay" id="overlay" style="display:none">
-    <div class="scan-frame"><span></span><div class="scan-line"></div></div>
-  </div>
-  <div class="flash-overlay" id="flash"></div>
-</div>
+<input id="scanner" placeholder="Escanea tu carnet..." autofocus>
 
-<div class="error-box" id="err-box"></div>
+<br>
 
-<div class="status-bar">
-  <span class="status-label">Último</span>
-  <span class="status-id" id="last-id">—</span>
-  <span class="dup-tag" id="dup-tag" style="display:none">DUPLICADO</span>
-</div>
+<button onclick="activarCamara()">📷 Escanear con cámara</button>
+<button onclick="descargarCSV()">⬇ Descargar CSV</button>
 
-<div class="options-bar">
-  <span class="opt-label">Ignorar duplicados automáticamente</span>
-  <label class="toggle">
-    <input type="checkbox" id="no-dups" checked>
-    <span class="toggle-slider"></span>
-  </label>
-</div>
+<div id="status"></div>
 
-<div class="controls">
-  <button class="btn btn-copy" id="copy-btn" onclick="copyAll()">📋 Copiar todo</button>
-  <button class="btn btn-clear" onclick="clearAll()">🗑</button>
-</div>
+<video id="video" autoplay></video>
 
-<div class="list-header">
-  <span class="list-title">IDs escaneados</span>
-  <span class="list-hint">uno por línea al pegar</span>
-</div>
-<div id="id-list">
-  <div class="empty">
-    <div class="empty-icon">↑</div>
-    <div class="empty-msg">Activá la cámara y acercá<br>el carnet para escanear</div>
-  </div>
-</div>
-
-<div class="toast" id="toast"></div>
+<table>
+  <thead>
+    <tr>
+      <th>Código</th>
+      <th>Fecha</th>
+      <th>Hora</th>
+    </tr>
+  </thead>
+  <tbody id="tabla"></tbody>
+</table>
 
 <script>
-const ids = [];
-let lastCode = null;
-let lastCodeTime = 0;
+let asistencias = [];
 let detector = null;
-let rafId = null;
+let stream = null;
 
-function showErr(msg) {
-  const b = document.getElementById('err-box');
-  b.style.display = 'block';
-  b.innerHTML = msg;
-}
-function showToast(msg) {
-  const t = document.getElementById('toast');
-  t.textContent = msg;
-  t.classList.add('show');
-  setTimeout(() => t.classList.remove('show'), 2500);
-}
-function doFlash() {
-  const f = document.getElementById('flash');
-  f.classList.add('active');
-  setTimeout(() => f.classList.remove('active'), 120);
+// ===============================
+// REGISTRO PRINCIPAL
+// ===============================
+function registrarAsistencia(codigo) {
+  if (!codigo) return;
+
+  const ahora = new Date();
+
+  const registro = {
+    codigo: codigo.trim(),
+    fecha: ahora.toISOString().split("T")[0],
+    hora: ahora.toLocaleTimeString()
+  };
+
+  asistencias.push(registro);
+  agregarTabla(registro);
+
+  mostrarStatus("✔ Asistencia registrada");
+
+  document.getElementById("scanner").value = "";
 }
 
-async function startCamera() {
-  document.getElementById('start-btn').style.display = 'none';
+// ===============================
+// TABLA
+// ===============================
+function agregarTabla(r) {
+  const fila = document.createElement("tr");
 
-  // Check BarcodeDetector
-  if (!('BarcodeDetector' in window)) {
-    showErr(`
-      <strong>⚠️ Tu navegador no soporta el escáner nativo.</strong><br><br>
-      Solución: Abrí este archivo con <strong>Google Chrome en Android</strong> (v83 o superior).<br>
-      En iPhone: Safari iOS 17+ o Chrome iOS también funcionan.<br><br>
-      Si ya usás Chrome y no funciona, probá habilitar:<br>
-      <code>chrome://flags → #enable-experimental-web-platform-features</code>
-    `);
-    document.getElementById('start-btn').style.display = 'flex';
+  fila.innerHTML = `
+    <td>${r.codigo}</td>
+    <td>${r.fecha}</td>
+    <td>${r.hora}</td>
+  `;
+
+  document.getElementById("tabla").appendChild(fila);
+}
+
+// ===============================
+// INPUT (PISTOLA)
+// ===============================
+const input = document.getElementById("scanner");
+
+input.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    registrarAsistencia(input.value);
+  }
+});
+
+// mantener enfoque siempre
+setInterval(() => input.focus(), 1000);
+
+// ===============================
+// CAMARA
+// ===============================
+async function activarCamara() {
+  if (!("BarcodeDetector" in window)) {
+    alert("Tu navegador no soporta escaneo por cámara");
     return;
   }
 
-  // Create BarcodeDetector
-  try {
-    const supported = await BarcodeDetector.getSupportedFormats();
-    detector = new BarcodeDetector({ formats: supported });
-  } catch(e) {
-    showErr('Error al crear detector: ' + e.message);
-    document.getElementById('start-btn').style.display = 'flex';
-    return;
-  }
+  detector = new BarcodeDetector();
 
-  // Request camera
-  let stream;
   try {
     stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }
+      video: { facingMode: "environment" }
     });
-  } catch(e) {
-    let msg = '❌ No se pudo acceder a la cámara.<br>';
-    if (e.name === 'NotAllowedError')  msg += 'Permiso denegado. Ve a ajustes del navegador y permite el acceso a la cámara.';
-    else if (e.name === 'NotFoundError')    msg += 'No se encontró ninguna cámara.';
-    else if (e.name === 'NotReadableError') msg += 'La cámara está siendo usada por otra aplicación.';
-    else msg += e.message;
-    showErr(msg);
-    document.getElementById('start-btn').style.display = 'flex';
+
+    const video = document.getElementById("video");
+    video.srcObject = stream;
+    video.style.display = "block";
+
+    scanLoop(video);
+
+  } catch (err) {
+    alert("Error al abrir cámara: " + err.message);
+  }
+}
+
+async function scanLoop(video) {
+  const codes = await detector.detect(video);
+
+  if (codes.length > 0) {
+    registrarAsistencia(codes[0].rawValue);
+    detenerCamara();
     return;
   }
 
-  const video = document.getElementById('video');
-  video.srcObject = stream;
-  document.getElementById('placeholder').style.display = 'none';
-  video.style.display = 'block';
-  document.getElementById('overlay').style.display = 'flex';
+  requestAnimationFrame(() => scanLoop(video));
+}
 
-  video.addEventListener('loadedmetadata', () => {
-    video.play().then(() => tick()).catch(e => showErr('Error al reproducir video: ' + e.message));
+function detenerCamara() {
+  if (stream) {
+    stream.getTracks().forEach(track => track.stop());
+  }
+  document.getElementById("video").style.display = "none";
+}
+
+// ===============================
+// CSV
+// ===============================
+function descargarCSV() {
+  let csv = "Codigo,Fecha,Hora\n";
+
+  asistencias.forEach(r => {
+    csv += `${r.codigo},${r.fecha},${r.hora}\n`;
   });
+
+  const blob = new Blob([csv], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "asistencia.csv";
+  a.click();
 }
 
-async function tick() {
-  const video = document.getElementById('video');
-  if (!video || video.readyState < 2) {
-    rafId = requestAnimationFrame(tick);
-    return;
-  }
-  try {
-    const results = await detector.detect(video);
-    if (results.length > 0) {
-      const code = results[0].rawValue;
-      const now = Date.now();
-      if (code !== lastCode || now - lastCodeTime > 1500) {
-        lastCode = code;
-        lastCodeTime = now;
-        onScanned(code);
-      }
-    }
-  } catch (_) {}
-  rafId = requestAnimationFrame(tick);
-}
+// ===============================
+// STATUS
+// ===============================
+function mostrarStatus(msg) {
+  const status = document.getElementById("status");
+  status.innerText = msg;
 
-function onScanned(id) {
-  const noDups = document.getElementById('no-dups').checked;
-  const isDup  = ids.includes(id);
-
-  doFlash();
-  if (navigator.vibrate) navigator.vibrate(isDup ? [30,30,30] : 60);
-
-  document.getElementById('last-id').textContent = id;
-  const dupTag = document.getElementById('dup-tag');
-
-  if (isDup && noDups) {
-    dupTag.style.display = 'inline';
-    setTimeout(() => dupTag.style.display = 'none', 1500);
-    return;
-  }
-  dupTag.style.display = 'none';
-
-  ids.unshift(id);
-  renderList(id);
-  updateBadge();
-}
-
-function renderList(freshId) {
-  const list = document.getElementById('id-list');
-  if (ids.length === 0) {
-    list.innerHTML = `<div class="empty"><div class="empty-icon">↑</div><div class="empty-msg">Activá la cámara y acercá<br>el carnet para escanear</div></div>`;
-    return;
-  }
-  list.innerHTML = ids.map((id, i) => `
-    <div class="id-item ${id === freshId && i === 0 ? 'fresh' : ''}">
-      <span class="item-num">${ids.length - i}</span>
-      <span class="item-id">${id}</span>
-      <button class="item-del" onclick="removeId(${i})">✕</button>
-    </div>
-  `).join('');
-}
-
-function updateBadge() {
-  document.getElementById('badge').textContent = `${ids.length} ID${ids.length !== 1 ? 's' : ''}`;
-}
-
-function removeId(i) {
-  ids.splice(i, 1);
-  renderList();
-  updateBadge();
-}
-
-async function copyAll() {
-  if (!ids.length) { showToast('⚠️ No hay IDs todavía'); return; }
-  const text = [...ids].reverse().join('\n');
-  try {
-    await navigator.clipboard.writeText(text);
-  } catch(e) {
-    const ta = document.createElement('textarea');
-    ta.value = text; ta.style.cssText = 'position:fixed;opacity:0';
-    document.body.appendChild(ta); ta.focus(); ta.select();
-    document.execCommand('copy'); document.body.removeChild(ta);
-  }
-  const btn = document.getElementById('copy-btn');
-  btn.classList.add('ok'); btn.textContent = '✅ ¡Copiado!';
-  setTimeout(() => { btn.classList.remove('ok'); btn.innerHTML = '📋 Copiar todo'; }, 2000);
-  showToast(`✅ ${ids.length} IDs copiados`);
-}
-
-function clearAll() {
-  if (!ids.length) return;
-  if (!confirm(`¿Borrar los ${ids.length} IDs escaneados?`)) return;
-  ids.length = 0; lastCode = null;
-  renderList(); updateBadge();
-  document.getElementById('last-id').textContent = '—';
-  showToast('🗑 Lista limpiada');
+  setTimeout(() => {
+    status.innerText = "";
+  }, 2000);
 }
 </script>
+
 </body>
 </html>
