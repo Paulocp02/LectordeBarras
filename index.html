@@ -146,6 +146,24 @@
     border-radius: 4px; font-family: 'Space Mono', monospace;
   }
 
+  /* Session info bar */
+  .session-bar {
+    padding: 6px 20px;
+    display: flex; align-items: center; gap: 6px;
+    border-bottom: 1px solid var(--border);
+    background: #0d0d14;
+  }
+  .session-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--accent); flex-shrink: 0;
+  }
+  .session-info {
+    font-size: 0.65rem; color: var(--muted);
+    font-family: 'Space Mono', monospace; flex: 1;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .session-info span { color: var(--accent); }
+
   .options-bar {
     padding: 7px 20px; display: flex; align-items: center; gap: 8px;
     border-bottom: 1px solid var(--border);
@@ -165,16 +183,24 @@
   .toggle input:checked + .toggle-slider { background: var(--accent2); }
   .toggle input:checked + .toggle-slider::after { transform: translateX(16px); background: var(--accent); }
 
-  .controls { display: flex; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+  .controls { display: flex; gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
   .btn {
     flex: 1; padding: 12px 8px; border: none; border-radius: 8px;
     font-family: 'Syne', sans-serif; font-weight: 700; font-size: 0.85rem;
     cursor: pointer; transition: all 0.15s;
     display: flex; align-items: center; justify-content: center; gap: 6px;
+    min-width: 0;
   }
   .btn-copy { background: var(--accent); color: #000; box-shadow: 0 4px 20px #00e5a040; }
   .btn-copy:active { transform: scale(0.97); }
   .btn-copy.ok { background: #fff; }
+  .btn-csv {
+    background: transparent; color: var(--accent);
+    border: 1px solid var(--accent2);
+    flex: 1;
+  }
+  .btn-csv:active { background: var(--accent2); }
+  .btn-csv.ok { background: var(--accent2); }
   .btn-clear { background: transparent; color: var(--danger); border: 1px solid #ff446644; flex: 0 0 auto; padding: 12px 16px; }
   .btn-clear:active { background: #ff446611; }
 
@@ -204,6 +230,7 @@
   }
   .item-num { font-size: 0.65rem; color: var(--muted); font-family: 'Space Mono', monospace; min-width: 18px; text-align: right; }
   .item-id  { font-family: 'Space Mono', monospace; font-size: 0.9rem; flex: 1; }
+  .item-time { font-size: 0.6rem; color: var(--muted); font-family: 'Space Mono', monospace; white-space: nowrap; }
   .item-del { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 1rem; padding: 0 4px; }
   .item-del:active { color: var(--danger); }
 
@@ -253,6 +280,11 @@
   <span class="dup-tag" id="dup-tag" style="display:none">DUPLICADO</span>
 </div>
 
+<div class="session-bar">
+  <div class="session-dot"></div>
+  <span class="session-info" id="session-info">Sesión: <span id="session-name">—</span></span>
+</div>
+
 <div class="options-bar">
   <span class="opt-label">Ignorar duplicados automáticamente</span>
   <label class="toggle">
@@ -262,7 +294,8 @@
 </div>
 
 <div class="controls">
-  <button class="btn btn-copy" id="copy-btn" onclick="copyAll()">📋 Copiar todo</button>
+  <button class="btn btn-copy" id="copy-btn" onclick="copyAll()">📋 Copiar</button>
+  <button class="btn btn-csv"  id="csv-btn"  onclick="downloadCSV()">⬇ CSV</button>
   <button class="btn btn-clear" onclick="clearAll()">🗑</button>
 </div>
 
@@ -280,12 +313,42 @@
 <div class="toast" id="toast"></div>
 
 <script>
-const ids = [];
+// ─── Storage key & session ───────────────────────────────────────────────────
+const STORAGE_KEY = 'asistencia_ids';
+
+// Each entry: { id, timestamp }
+let entries = [];
 let lastCode = null;
 let lastCodeTime = 0;
 let detector = null;
 let rafId = null;
 
+// Session name = date + time at page load
+const sessionName = (() => {
+  const now = new Date();
+  const pad = n => String(n).padStart(2,'0');
+  return `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+})();
+
+// ─── Persistence ─────────────────────────────────────────────────────────────
+function loadFromStorage() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      // Support old format (plain string array) and new format (objects)
+      entries = parsed.map(e => typeof e === 'string' ? { id: e, timestamp: '' } : e);
+    }
+  } catch (_) { entries = []; }
+}
+
+function saveToStorage() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
+  } catch (_) {}
+}
+
+// ─── UI helpers ──────────────────────────────────────────────────────────────
 function showErr(msg) {
   const b = document.getElementById('err-box');
   b.style.display = 'block';
@@ -303,10 +366,10 @@ function doFlash() {
   setTimeout(() => f.classList.remove('active'), 120);
 }
 
+// ─── Camera ───────────────────────────────────────────────────────────────────
 async function startCamera() {
   document.getElementById('start-btn').style.display = 'none';
 
-  // Check BarcodeDetector
   if (!('BarcodeDetector' in window)) {
     showErr(`
       <strong>⚠️ Tu navegador no soporta el escáner nativo.</strong><br><br>
@@ -319,7 +382,6 @@ async function startCamera() {
     return;
   }
 
-  // Create BarcodeDetector
   try {
     const supported = await BarcodeDetector.getSupportedFormats();
     detector = new BarcodeDetector({ formats: supported });
@@ -329,7 +391,6 @@ async function startCamera() {
     return;
   }
 
-  // Request camera
   let stream;
   try {
     stream = await navigator.mediaDevices.getUserMedia({
@@ -337,7 +398,7 @@ async function startCamera() {
     });
   } catch(e) {
     let msg = '❌ No se pudo acceder a la cámara.<br>';
-    if (e.name === 'NotAllowedError')  msg += 'Permiso denegado. Ve a ajustes del navegador y permite el acceso a la cámara.';
+    if (e.name === 'NotAllowedError')       msg += 'Permiso denegado. Ve a ajustes del navegador y permite el acceso a la cámara.';
     else if (e.name === 'NotFoundError')    msg += 'No se encontró ninguna cámara.';
     else if (e.name === 'NotReadableError') msg += 'La cámara está siendo usada por otra aplicación.';
     else msg += e.message;
@@ -359,10 +420,7 @@ async function startCamera() {
 
 async function tick() {
   const video = document.getElementById('video');
-  if (!video || video.readyState < 2) {
-    rafId = requestAnimationFrame(tick);
-    return;
-  }
+  if (!video || video.readyState < 2) { rafId = requestAnimationFrame(tick); return; }
   try {
     const results = await detector.detect(video);
     if (results.length > 0) {
@@ -378,9 +436,10 @@ async function tick() {
   rafId = requestAnimationFrame(tick);
 }
 
+// ─── Scan handler ─────────────────────────────────────────────────────────────
 function onScanned(id) {
   const noDups = document.getElementById('no-dups').checked;
-  const isDup  = ids.includes(id);
+  const isDup  = entries.some(e => e.id === id);
 
   doFlash();
   if (navigator.vibrate) navigator.vibrate(isDup ? [30,30,30] : 60);
@@ -395,39 +454,53 @@ function onScanned(id) {
   }
   dupTag.style.display = 'none';
 
-  ids.unshift(id);
+  const now = new Date();
+  const pad = n => String(n).padStart(2,'0');
+  const timestamp = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+
+  entries.unshift({ id, timestamp });
+  saveToStorage();
   renderList(id);
   updateBadge();
 }
 
+// ─── Render ───────────────────────────────────────────────────────────────────
 function renderList(freshId) {
   const list = document.getElementById('id-list');
-  if (ids.length === 0) {
+  if (entries.length === 0) {
     list.innerHTML = `<div class="empty"><div class="empty-icon">↑</div><div class="empty-msg">Activá la cámara y acercá<br>el carnet para escanear</div></div>`;
     return;
   }
-  list.innerHTML = ids.map((id, i) => `
-    <div class="id-item ${id === freshId && i === 0 ? 'fresh' : ''}">
-      <span class="item-num">${ids.length - i}</span>
-      <span class="item-id">${id}</span>
+  list.innerHTML = entries.map((entry, i) => `
+    <div class="id-item ${entry.id === freshId && i === 0 ? 'fresh' : ''}">
+      <span class="item-num">${entries.length - i}</span>
+      <span class="item-id">${entry.id}</span>
+      ${entry.timestamp ? `<span class="item-time">${entry.timestamp.split(' ')[1]}</span>` : ''}
       <button class="item-del" onclick="removeId(${i})">✕</button>
     </div>
   `).join('');
 }
 
 function updateBadge() {
-  document.getElementById('badge').textContent = `${ids.length} ID${ids.length !== 1 ? 's' : ''}`;
+  const n = entries.length;
+  document.getElementById('badge').textContent = `${n} ID${n !== 1 ? 's' : ''}`;
 }
 
+function updateSessionBar() {
+  document.getElementById('session-name').textContent = sessionName;
+}
+
+// ─── Actions ──────────────────────────────────────────────────────────────────
 function removeId(i) {
-  ids.splice(i, 1);
+  entries.splice(i, 1);
+  saveToStorage();
   renderList();
   updateBadge();
 }
 
 async function copyAll() {
-  if (!ids.length) { showToast('⚠️ No hay IDs todavía'); return; }
-  const text = [...ids].reverse().join('\n');
+  if (!entries.length) { showToast('⚠️ No hay IDs todavía'); return; }
+  const text = [...entries].reverse().map(e => e.id).join('\n');
   try {
     await navigator.clipboard.writeText(text);
   } catch(e) {
@@ -438,17 +511,59 @@ async function copyAll() {
   }
   const btn = document.getElementById('copy-btn');
   btn.classList.add('ok'); btn.textContent = '✅ ¡Copiado!';
-  setTimeout(() => { btn.classList.remove('ok'); btn.innerHTML = '📋 Copiar todo'; }, 2000);
-  showToast(`✅ ${ids.length} IDs copiados`);
+  setTimeout(() => { btn.classList.remove('ok'); btn.innerHTML = '📋 Copiar'; }, 2000);
+  showToast(`✅ ${entries.length} IDs copiados`);
+}
+
+function downloadCSV() {
+  if (!entries.length) { showToast('⚠️ No hay IDs todavía'); return; }
+
+  // Build CSV: header + rows in chronological order
+  const rows = [['#', 'ID', 'Fecha', 'Hora']];
+  [...entries].reverse().forEach((e, i) => {
+    const [fecha, hora] = e.timestamp ? e.timestamp.split(' ') : ['', ''];
+    rows.push([i + 1, e.id, fecha, hora]);
+  });
+
+  const csv = rows.map(r => r.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\r\n');
+
+  // File name includes session timestamp
+  const safeName = sessionName.replace(/[: ]/g, '-');
+  const filename = `asistencia_${safeName}.csv`;
+
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' }); // BOM for Excel
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+
+  const btn = document.getElementById('csv-btn');
+  btn.classList.add('ok'); btn.textContent = '✅ Descargado';
+  setTimeout(() => { btn.classList.remove('ok'); btn.innerHTML = '⬇ CSV'; }, 2500);
+  showToast(`⬇ ${filename}`);
 }
 
 function clearAll() {
-  if (!ids.length) return;
-  if (!confirm(`¿Borrar los ${ids.length} IDs escaneados?`)) return;
-  ids.length = 0; lastCode = null;
+  if (!entries.length) return;
+  if (!confirm(`¿Borrar los ${entries.length} IDs escaneados? También se borrará la memoria guardada.`)) return;
+  entries = [];
+  lastCode = null;
+  saveToStorage();
   renderList(); updateBadge();
   document.getElementById('last-id').textContent = '—';
   showToast('🗑 Lista limpiada');
+}
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
+loadFromStorage();
+updateSessionBar();
+renderList();
+updateBadge();
+
+if (entries.length > 0) {
+  showToast(`💾 ${entries.length} IDs cargados de memoria`);
 }
 </script>
 </body>
