@@ -73,7 +73,8 @@
 
 <div id="status"></div>
 
-<video id="video" autoplay></video>
+<!-- FIX 1: agregado playsinline y muted -->
+<video id="video" autoplay playsinline muted></video>
 
 <table>
   <thead>
@@ -90,6 +91,10 @@
 let asistencias = [];
 let detector = null;
 let stream = null;
+
+// FIX 2: variables para el debounce
+let ultimoCodigo = null;
+let ultimoTiempo = 0;
 
 // ===============================
 // REGISTRO PRINCIPAL
@@ -108,7 +113,7 @@ function registrarAsistencia(codigo) {
   asistencias.push(registro);
   agregarTabla(registro);
 
-  mostrarStatus("✔ Asistencia registrada");
+  mostrarStatus("✔ Asistencia registrada: " + codigo.trim());
 
   document.getElementById("scanner").value = "";
 }
@@ -129,7 +134,7 @@ function agregarTabla(r) {
 }
 
 // ===============================
-// INPUT (PISTOLA)
+// INPUT (PISTOLA USB)
 // ===============================
 const input = document.getElementById("scanner");
 
@@ -139,7 +144,6 @@ input.addEventListener("keydown", (e) => {
   }
 });
 
-// mantener enfoque siempre
 setInterval(() => input.focus(), 1000);
 
 // ===============================
@@ -147,11 +151,17 @@ setInterval(() => input.focus(), 1000);
 // ===============================
 async function activarCamara() {
   if (!("BarcodeDetector" in window)) {
-    alert("Tu navegador no soporta escaneo por cámara");
+    alert("Tu navegador no soporta escaneo por cámara.\nUsá Google Chrome en Android (v83+).");
     return;
   }
 
-  detector = new BarcodeDetector();
+  try {
+    const formatosSoportados = await BarcodeDetector.getSupportedFormats();
+    detector = new BarcodeDetector({ formats: formatosSoportados });
+  } catch (err) {
+    alert("Error al crear el detector: " + err.message);
+    return;
+  }
 
   try {
     stream = await navigator.mediaDevices.getUserMedia({
@@ -162,20 +172,40 @@ async function activarCamara() {
     video.srcObject = stream;
     video.style.display = "block";
 
-    scanLoop(video);
+    // FIX 2: esperar a que el video esté listo antes de escanear
+    video.onloadedmetadata = () => {
+      video.play().then(() => scanLoop(video));
+    };
 
   } catch (err) {
     alert("Error al abrir cámara: " + err.message);
   }
 }
 
+// FIX 2: verificar readyState y aplicar debounce
 async function scanLoop(video) {
-  const codes = await detector.detect(video);
-
-  if (codes.length > 0) {
-    registrarAsistencia(codes[0].rawValue);
-    detenerCamara();
+  if (video.readyState < 2) {
+    requestAnimationFrame(() => scanLoop(video));
     return;
+  }
+
+  try {
+    const codes = await detector.detect(video);
+
+    if (codes.length > 0) {
+      const codigo = codes[0].rawValue;
+      const ahora = Date.now();
+
+      if (codigo !== ultimoCodigo || ahora - ultimoTiempo > 1500) {
+        ultimoCodigo = codigo;
+        ultimoTiempo = ahora;
+        registrarAsistencia(codigo);
+        detenerCamara();
+        return;
+      }
+    }
+  } catch (e) {
+    // frame no disponible aún, continuar
   }
 
   requestAnimationFrame(() => scanLoop(video));
